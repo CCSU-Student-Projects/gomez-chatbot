@@ -1,6 +1,8 @@
+import json
 from urllib.request import urlopen, Request
 from link_finder import LinkFinder
 from fileManager import * 
+from html_parser import * 
 import redis 
 
 r = redis.Redis(host='localhost', port=6379, db=0) # Connect to Redis server
@@ -12,6 +14,8 @@ class Spider:
     domain_name= ''
     queue_file = ''
     crawled_file = ''
+    parser = None
+    parsed_docs = [] 
 
 # Spider class to manage crawling and link extraction
     def __init__(self, project_name, base_url, domain_name): 
@@ -25,19 +29,33 @@ class Spider:
 # Static methods to handle crawling and file management
     @staticmethod
     def bootUP(): 
+        r.flushdb() # Clear Redis for a fresh start
         create_project_dir(Spider.project_name) 
         create_data_files(Spider.project_name, Spider.base_url)
+        Spider.parser = HTMLPARSER(Spider.base_url, Spider.domain_name)
 # Static method to crawl a page and extract links
     @staticmethod 
     def crawl_page(thread_name, page_url): 
-            if not r.sismember('visited', page_url):
-                print (thread_name + ' now crawling ' + page_url) 
-                print ('Queue:' + str(r.llen('crawl_queue')) + ''
-                    ' | Crawled: ' + str(r.scard('visited')))
-                Spider.add_links_to_queue(Spider.gather_links_smart(page_url))
+            print(f"{thread_name} crawling: {page_url}")
+            links = Spider.gather_links_smart(page_url) 
+            Spider.add_links_to_queue(links) # Add the new links to the Redis queue
+            
+            if Spider.parser: 
+                doc = Spider.parser.parse(page_url)
+                if doc: 
+                    Spider.parsed_docs.append(doc) # Store the parsed document in memory (could be saved to file or database later)
+
+                    if len(Spider.parsed_docs) >= 10: # Every 10 parsed documents, save to file to prevent memory loss 
+                        with open(f"{Spider.project_name}/parsed_docs.json", 'a', encoding='utf-8') as f:
+                                for document in Spider.parsed_docs:
+                                    f.write(json.dumps(document, ensure_ascii=False) + '\n')
+                                Spider.parsed_docs.clear()
+                                print("--- SAVED BATCHES TO JSON ---") 
+
+
                 r.lrem('crawl_queue', 1, page_url) # Remove the URL from the Redis queue
                 r.sadd('visited', page_url)
-                Spider.update_files() 
+                Spider.update_files()  # Update the queue and crawled files from Redis data
 
     @staticmethod 
     # Static method to gather links from a page
@@ -112,8 +130,8 @@ class Spider:
     @staticmethod 
     def add_links_to_queue(links): # Loop through each link one by one, if it exists, go to the next item in the list 
         for url in links: 
-            if r.sismember('visited', url):
-                continue 
+            if url.startswith(('mailto:', 'tel:', 'javascript:', 'Mailto:', '#')):
+                continue
             if Spider.domain_name not in url:
                 continue 
             r.rpush('crawl_queue', url)

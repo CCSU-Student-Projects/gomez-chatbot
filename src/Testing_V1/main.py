@@ -4,6 +4,7 @@ import redis
 from spider import Spider
 from domain import *
 from fileManager import *
+import json 
 
 
 # Redis commands used:
@@ -21,11 +22,8 @@ from fileManager import *
 
 PROJECT_NAME = 'CCSU_Crawl_Test' 
 HOME_PAGE = 'https://www.ccsu.edu/a-z-index'
-DOMAIN_NAME = get_domain_name(HOME_PAGE)
-QUEUE_FILE = PROJECT_NAME + '/queue.txt'
-CRAWLED_FILE = PROJECT_NAME + '/crawled.txt'
-NUMBER_OF_THREADS = 4
-
+DOMAIN_NAME = 'ccsu.edu'
+NUMBER_OF_THREADS = 8
 # Initialize Redis connection (Connects to local Redis instance)
 r = redis.Redis(host='localhost', port=6379, db=0)
 
@@ -36,7 +34,7 @@ def load_queue():
     for link in links:
         if not r.sismember('visited', link):  # Only add to queue if not already visited
             r.rpush('crawl_queue', link)
-    print(f"{r.llen('crawl_queue')} links loaded into Redis queue") #Print the number of links loaded into Redis 
+    print(f"{r.llen('crawl_queue')} links loaded into Redis queue") # Print the number of links loaded into Redis 
 
 def create_workers():
     threads = [] # Create worker threads to process the crawl queue
@@ -51,36 +49,42 @@ def create_workers():
 def work():
     
     while True:
-        url = r.lpop('crawl_queue') # Get a URL from the Redis queue
-        if not url:
-            time.sleep(0.5) ### If the queue is empty, you need to wait for a bit before trying again to avoid busy-waiting ### 
-            continue
-        url = url.decode('utf-8') # Decode bytes to string
-        if r.sismember('visited', url):
-            continue
-        r.sadd('visited', url) # Mark URL as visited in Redis
-        Spider.crawl_page(threading.current_thread().name, url)
+        # Get a URL and wait 5 seconds. 
+        result = r.blpop('crawl_queue', timeout=5) # Get a URL from the Redis queue
+        if not result:  # If no URL is retrieved within the timeout, break the loop
+            continue 
+        url = result[1].decode('utf-8')  # Decode bytes to string
+
+        if r.sadd('visited' , url): # Mark the URL as visited in Redis
+            
+            Spider.crawl_page(threading.current_thread().name, url) # Crawl the page and extract links
+
 
 def crawl():
-    r.flushdb() # Clear Redis for a fresh start
     Spider(PROJECT_NAME, HOME_PAGE, DOMAIN_NAME)  # Explores queue.txt first
     r.rpush('crawl_queue',HOME_PAGE)
     Spider.crawl_page('Main', HOME_PAGE)
 
-    print(f"Starting with the homepage, found {r.llen('crawl_queue')} links in the queue.")
-    create_workers()
-    empty_count = 0 
-    while empty_count < 5:  # Wait until the queue is empty for a few checks
-        if r.llen('crawl_queue') == 0:
-            empty_count += 1
-            # Count for up to five seconds of an empty queue before concluding the crawl is complete
-            print(f"Queue is empty... {empty_count} /5") 
-        else:
-            empty_count = 0
-            print(f"Initial Queue Size: {r.llen('crawl_queue')}") 
-        time.sleep(2)
+    for i in range(NUMBER_OF_THREADS):
+        t = threading.Thread(target=work) 
+        t.daemon = True
+        t.start()
+    while True: 
+        print(f"Queue Size: {r.llen('crawl_queue')} | Visited: {r.scard('visited')} ")
+        time.sleep(5) # Sleep for a while before checking the queue again
 
-    print("Crawl Complete.") 
-    print(f"Total Unique URLs Visited: {r.scard('visited')} URLs") # Print the total number of unique URLs visited
+if __name__ == '__main__':
+    crawl()
+    
+# Flush any remaining docs under 100
+if Spider.parsed_docs:
+    with open(PROJECT_NAME + '/output.json', 'a', encoding='utf-8') as f:
+        for d in Spider.parsed_docs:
+            f.write(json.dumps(d, ensure_ascii=False) + '\n')
 
-crawl()
+
+print("Crawl complete! Final stats:")
+print(f"Total URLs visited: {r.scard('visited')}")
+
+
+

@@ -1,92 +1,64 @@
 from bs4 import BeautifulSoup 
-import os
-import requests
-from urllib.parse import urljoin
-from link_finder import LinkFinder
+import requests 
+from urllib.parse import urlparse 
 
-# Get the directory of the current script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-filename = os.path.join(script_dir, 'myTester.html')
-
-# Read the local HTML file
-with open(filename, 'r') as file:
-    html_content = file.read()
-
-# Use LinkFinder to extract links from the HTML
-base_url = 'file://' + filename
-page_url = 'file://' + filename
-link_finder = LinkFinder(base_url, page_url)
-link_finder.feed(html_content)
-found_links = link_finder.page_links()
-
-print("=== LINKS FOUND BY LinkFinder ===")
-for link in found_links:
-    print(f"  {link}")
-
-# Now fetch and parse each link
-print("\n=== FETCHING AND PARSING LINKS ===")
-# Limit to first link only for testing
-valid_links = [url for url in found_links if url.startswith('http://') or url.startswith('https://')]
-
-if valid_links:
-    # Process only the first link
-    url = valid_links[0]
-    print(f"Processing first link: {url}")
+class HTMLPARSER: 
     
-    try:
-        print(f"\nFetching: {url}")
-        response = requests.get(url, timeout=5)
-        soup = BeautifulSoup(response.content, 'html.parser')
+    SKIP_EXTENSIONS = ('.pdf', '.docx', '.doc', '.ppt', '.pptx', 
+                       '.xls', '.xlsx', '.zip', '.mp4', '.mp3')
+    
+    def __init__(self, base_url, domain_name): 
+        self.base_url = base_url
+        self.domain_name = domain_name
+        self.session = requests.Session()  # Use a session for connection pooling and retries
+    def parse(self,url): 
+        if url.endswith(self.SKIP_EXTENSIONS): # Skip URLs that don't point to HTML content
+            print(f"Skipping non-HTML content: {url}")
+            return None
+        if url.startswith('mailto:') or url.startswith('tel:'):
+            print(f"Skipping non-web link: {url}")
+            return None
+        try: 
+            response = self.session.get(url, timeout=10) 
+        except Exception as e: 
+            print (f"Error fetching {url}: {e}")
+            return None
         
-        print("--- STRUCTURED DATA ---")
-        # Tables
-        tables = soup.find_all('table')
-        if tables:
-            for i, table in enumerate(tables):
-                print(f"Table {i + 1}:")
-                rows = table.find_all('tr')
-                for row in rows:
-                    cols = row.find_all(['td', 'th'])
-                    print([col.get_text(strip=True) for col in cols])
-        
-        # Lists
-        lists = soup.find_all('ul')
-        if lists:
-            print("Lists:")
-            for ul in lists:
-                items = ul.find_all('li')
-                for item in items:
-                    print(f"  - {item.get_text(strip=True)}")
-        
-        print("--- UNSTRUCTURED DATA ---")
-        # Headings
-        headings = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
-        if headings:
-            print("Headings:")
-            for heading in headings[:5]:
-                print(f"  {heading.name}: {heading.get_text(strip=True)}")
-        
-        # First 200 chars of body text
-        body_text = soup.get_text(strip=True)
-        print(f"Content: {body_text[:200]}...")
-        
-    except requests.RequestException as e:
-        print(f"  Error fetching {url}: {e}")
-else:
-    print("No valid HTTP/HTTPS links found to process")
+        content_type = response.headers.get('Content-Type', '') # Check the Content-Type header to ensure it's HTML
+        if 'text/html' not in content_type: 
+            print(f"Skipping non-HTML content: {url} (Content-Type: {content_type})")
+            return None
+    
+        soup = BeautifulSoup(response.text, 'html.parser') # Parse the HTML content using BeautifulSoup
+        return self.extract_content(soup, url) # Extract structured content from the page
+    
+    def extract_content(self, soup, url):
+        # WE NEED TO REMOVE UNNESSARY CONTENT FOR HTML 
+        for tag in soup(['script', 'style', 'header', 'footer', 'nav', 'aside']):
+            tag.decompose()  # Remove these tags and their content from the soup    
 
-print(f"\nTotal links found: {len(found_links)}")
-print(f"Valid HTTP/HTTPS links: {len(valid_links)}")
-if len(valid_links) > 1:
-    print(f"Remaining links (not processed): {valid_links[1:]}")
+        meta = soup.find('meta', attrs={'name': 'description'})
+        
+        headings = [
+            {
+                'level': heading.name,
+                'text': heading.get_text(strip=True)
+            }
+            for heading in soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            if heading.get_text(strip=True)  # Only include headings with non-empty text
+        ]
+        
+        paragraphs = [ 
+            text
+            for p in soup.find_all('p') 
+            if (text := p.get_text(strip=True)) and len(text.split()) > 10
+        ]
+        return {
+            'url': url,
+            'title': soup.title.string if soup.title else '',
+            'meta_description': meta['content'] if meta and 'content' in meta.attrs else '',
+            'headings': headings,
+            'paragraphs': paragraphs, 
+            'status': 'parsed' 
+        }
 
-# Also parse the original local file
-print("\n\n=== PARSING LOCAL FILE WITH BeautifulSoup ===")
-soup = BeautifulSoup(html_content, 'html.parser')
-
-print("=== LINKS IN LOCAL FILE ===")
-links = soup.find_all('a')
-for link in links:
-    href = link.get('href')
-    text = link.get_text(strip=True)
-    print(f"URL: {href}, Text: {text}")
