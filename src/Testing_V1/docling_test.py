@@ -4,9 +4,9 @@ from docling.document_converter import DocumentConverter
 #Make a variable with the assigned .pdf to put into the source varianle
 #Convert pdf to JSON and send to a db
 
-source = "https://docs.ccsu.edu/CampusMap.pdf"
 converter = DocumentConverter()
+source = "https://docs.ccsu.edu/CampusMap.pdf"
 doc = converter.convert(source).document
 print(doc.export_to_markdown())
 
-#https://www.docling.ai/#start
+#https://www.docling.ai/#start 
