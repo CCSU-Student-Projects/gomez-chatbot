@@ -1,36 +1,48 @@
 from bs4 import BeautifulSoup 
 import requests 
 from urllib.parse import urlparse 
+import json 
+from docling.document_converter import DocumentConverter
+
+converter = None 
+
+def get_Converter(): 
+    global converter 
+    if converter is None: 
+        converter = DocumentConverter() 
+    return converter
+
+DOCLING_EXTENSIONS = ('.pdf', '.docx', '.doc', '.ppt', '.pptx', 
+                       '.xls', '.xlsx')
+SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg')
+
+
+converter = DocumentConverter() 
 
 class HTMLPARSER: 
     
-    SKIP_EXTENSIONS = ('.pdf', '.docx', '.doc', '.ppt', '.pptx', 
-                       '.xls', '.xlsx', '.zip', '.mp4', '.mp3')
     
     def __init__(self, base_url, domain_name): 
         self.base_url = base_url
         self.domain_name = domain_name
         self.session = requests.Session()  # Use a session for connection pooling and retries
-    def parse(self,url): 
-        if url.endswith(self.SKIP_EXTENSIONS): # Skip URLs that don't point to HTML content
-            print(f"Skipping non-HTML content: {url}")
-            return None
-        if url.startswith('mailto:') or url.startswith('tel:'):
-            print(f"Skipping non-web link: {url}")
-            return None
-        try: 
-            response = self.session.get(url, timeout=10) 
-        except Exception as e: 
-            print (f"Error fetching {url}: {e}")
-            return None
-        
-        content_type = response.headers.get('Content-Type', '') # Check the Content-Type header to ensure it's HTML
-        if 'text/html' not in content_type: 
-            print(f"Skipping non-HTML content: {url} (Content-Type: {content_type})")
-            return None
-    
-        soup = BeautifulSoup(response.text, 'html.parser') # Parse the HTML content using BeautifulSoup
-        return self.extract_content(soup, url) # Extract structured content from the page
+    def parse(self,url):  
+        lower = url.lower() #Set the url to lowercase
+        if any(lower.endswith(ext) for ext in SKIP_EXTENSIONS): # ext 
+            return None 
+
+        if any(lower.endswith(ext) for ext in DOCLING_EXTENSIONS):
+            result = get_Converter().convert(url)
+            record = {"url": url, "type": "docling", "content": result.document.export_to_markdown() }
+        else: 
+            response = self.session.get(url, timeout= 10) 
+            soup = BeautifulSoup(response.text, 'html.parser')
+            record = self.extract_content(soup, url) 
+            record["type"] = "html"
+
+        with open("parsed_docs.json", "a") as f:
+                  f.write(json.dumps(record) + "\n")
+        return record 
     
     def extract_content(self, soup, url):
         # WE NEED TO REMOVE UNNESSARY CONTENT FOR HTML 
@@ -55,6 +67,7 @@ class HTMLPARSER:
         ]
         return {
             'url': url,
+            'type': 'html',
             'title': soup.title.string if soup.title else '',
             'meta_description': meta['content'] if meta and 'content' in meta.attrs else '',
             'headings': headings,

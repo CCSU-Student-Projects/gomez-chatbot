@@ -4,6 +4,7 @@ from link_finder import LinkFinder
 from fileManager import * 
 from html_parser import * 
 import redis 
+import threading
 
 r = redis.Redis(host='localhost', port=6379, db=0) # Connect to Redis server
 
@@ -16,6 +17,7 @@ class Spider:
     crawled_file = ''
     parser = None
     parsed_docs = [] 
+    lock = threading.Lock() # Preventing multiple workers accessing the same URL 
 
 # Spider class to manage crawling and link extraction
     def __init__(self, project_name, base_url, domain_name): 
@@ -43,10 +45,9 @@ class Spider:
             if Spider.parser: 
                 doc = Spider.parser.parse(page_url)
                 if doc: 
-                    Spider.parsed_docs.append(doc) # Store the parsed document in memory (could be saved to file or database later)
-
-                    if len(Spider.parsed_docs) >= 10: # Every 10 parsed documents, save to file to prevent memory loss 
-                        with open(f"{Spider.project_name}/parsed_docs.json", 'a', encoding='utf-8') as f:
+                    with  Spider.lock: 
+                        if len(Spider.parsed_docs) >= 10: # Every 10 parsed documents, save to file to prevent memory loss 
+                            with open(f"{Spider.project_name}/parsed_docs.json", 'a', encoding='utf-8') as f:
                                 for document in Spider.parsed_docs:
                                     f.write(json.dumps(document, ensure_ascii=False) + '\n')
                                 Spider.parsed_docs.clear()
@@ -79,6 +80,7 @@ class Spider:
             return set() 
         return finder.page_links()
     
+    '''
     @staticmethod 
     # Static method to gather links from a page using Playwright for JS rendering
     def gather_links_with_js(page_url):
@@ -109,13 +111,16 @@ class Spider:
             return set()
         
         return finder.page_links()
-
+'''
     @staticmethod 
     # Static method to gather links from a page (tries regular method first, then JS if needed)
     def gather_links_smart(page_url):
         """Try regular crawling first, fallback to Playwright for JS-heavy pages"""
         links = Spider.gather_links(page_url)
-        
+    
+        return links
+
+    ''''
         # If we got very few links, try with Playwright (might be JS-rendered)
         if len(links) < 5:
             print(f'  → Low link count ({len(links)}), trying Playwright for JS-rendered content...')
@@ -123,9 +128,8 @@ class Spider:
             if len(js_links) > len(links):
                 print(f'  → Playwright found {len(js_links)} links (vs {len(links)} before)')
                 return js_links
-        
-        return links
-    
+    '''
+
 
     @staticmethod 
     def add_links_to_queue(links): # Loop through each link one by one, if it exists, go to the next item in the list 
@@ -134,7 +138,11 @@ class Spider:
                 continue
             if Spider.domain_name not in url:
                 continue 
-            r.rpush('crawl_queue', url)
+            if not r.sismember('visited', url):
+                if any(url.lower().endswith(ext) for ext in DOCLING_EXTENSIONS): 
+                    r.rpush('doc_queue', url) # BASICALLY ONLY DO DOCLING AFTER IT RUNS THE OTHERS 
+                else: 
+                    r.rpush('crawl_queue', url)
                 
     @staticmethod 
     # Static method to update the queue and crawled files from Redis data

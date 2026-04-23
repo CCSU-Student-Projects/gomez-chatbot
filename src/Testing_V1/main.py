@@ -8,11 +8,11 @@ import json
 
 
 # Redis commands used:
-# r.sismember(key, member) - Check if member (url) exists in set
+# r.sismember(key, member) - Check if url exists in set
 # r.rpush(key, value) - Push value to end of list
 # r.llen(key) - Get length of list
 # r.lpop(key) - Pop value from start of list
-# r.sadd(key, member) - Add member to set
+# r.sadd(key, member) - Add url to set
 # r.flushdb() - Clear all keys in current queue 
 # r.scard(key) - Get cardinality (size) of set
 
@@ -29,8 +29,9 @@ r = redis.Redis(host='localhost', port=6379, db=0)
 
 
 # Load initial URLs from queue.txt into Redis
+
 def load_queue():
-    links = file_to_set(QUEUE_FILE)
+    links = file_to_set('queue.txt')
     for link in links:
         if not r.sismember('visited', link):  # Only add to queue if not already visited
             r.rpush('crawl_queue', link)
@@ -56,35 +57,33 @@ def work():
         url = result[1].decode('utf-8')  # Decode bytes to string
 
         if r.sadd('visited' , url): # Mark the URL as visited in Redis
-            
             Spider.crawl_page(threading.current_thread().name, url) # Crawl the page and extract links
 
 
 def crawl():
-    Spider(PROJECT_NAME, HOME_PAGE, DOMAIN_NAME)  # Explores queue.txt first
+    r.flushdb() # Clear Redis for a fresh start 
+    print("Starting crawl...")
+    Spider(PROJECT_NAME, HOME_PAGE, DOMAIN_NAME)  
+    # Explores queue.txt first
     r.rpush('crawl_queue',HOME_PAGE)
     Spider.crawl_page('Main', HOME_PAGE)
 
-    for i in range(NUMBER_OF_THREADS):
-        t = threading.Thread(target=work) 
-        t.daemon = True
-        t.start()
+    create_workers() # Start worker threads to process the crawl queue
+
     while True: 
+        queue_size = r.llen('crawl_queue')
         print(f"Queue Size: {r.llen('crawl_queue')} | Visited: {r.scard('visited')} ")
-        time.sleep(5) # Sleep for a while before checking the queue again
+        if queue_size == 100: 
+            break
+        time.sleep(5)
+
+# Flush any remaining docs under 100
+        if Spider.parsed_docs:
+            with open(PROJECT_NAME + '/parsed_docs.json', 'a', encoding='utf-8') as f:
+                for d in Spider.parsed_docs:
+                     f.write(json.dumps(d, ensure_ascii=False) + '\n')
+        print("Crawl complete! Final stats:")
+        print(f"Total URLs visited: {r.scard('visited')}")
 
 if __name__ == '__main__':
-    crawl()
-    
-# Flush any remaining docs under 100
-if Spider.parsed_docs:
-    with open(PROJECT_NAME + '/output.json', 'a', encoding='utf-8') as f:
-        for d in Spider.parsed_docs:
-            f.write(json.dumps(d, ensure_ascii=False) + '\n')
-
-
-print("Crawl complete! Final stats:")
-print(f"Total URLs visited: {r.scard('visited')}")
-
-
-
+      crawl() 
