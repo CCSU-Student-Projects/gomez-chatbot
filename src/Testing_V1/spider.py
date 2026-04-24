@@ -1,5 +1,6 @@
 import json
 from urllib.request import urlopen, Request
+from urllib.robotparser import RobotFileParser
 from link_finder import LinkFinder
 from fileManager import * 
 from html_parser import * 
@@ -28,13 +29,21 @@ class Spider:
         Spider.crawled_file = Spider.project_name + '/crawled.txt'
         self.bootUP() 
 
-# Static methods to handle crawling and file management
+    @staticmethod
+    # Robot Parser to check if crawling is allowed for a URL
+    def get_robot_parser():
+        rp = RobotFileParser()
+        rp.set_url(f"{Spider.base_url}/robots.txt")
+        rp.read()
+        return rp
     @staticmethod
     def bootUP(): 
         r.flushdb() # Clear Redis for a fresh start
         create_project_dir(Spider.project_name) 
         create_data_files(Spider.project_name, Spider.base_url)
         Spider.parser = HTMLPARSER(Spider.base_url, Spider.domain_name)
+        Spider.robot_parser = RobotFileParser() 
+        Spider.robot_parser.set_url(f"{Spider.base_url}/robots.txt")
 # Static method to crawl a page and extract links
     @staticmethod 
     def crawl_page(thread_name, page_url): 
@@ -46,21 +55,23 @@ class Spider:
                 doc = Spider.parser.parse(page_url)
                 if doc: 
                     with  Spider.lock: 
+                        Spider.parsed_docs.append(doc)
                         if len(Spider.parsed_docs) >= 10: # Every 10 parsed documents, save to file to prevent memory loss 
-                            with open(f"{Spider.project_name}/parsed_docs.json", 'a', encoding='utf-8') as f:
+                            with open(f"{Spider.project_name}/parsed_docs.jsonl", 'a', encoding='utf-8') as f:
                                 for document in Spider.parsed_docs:
                                     f.write(json.dumps(document, ensure_ascii=False) + '\n')
                                 Spider.parsed_docs.clear()
-                                print("--- SAVED BATCHES TO JSON ---") 
+                                print("--- SAVED BATCHES TO JSONL ---") 
 
-
-                r.lrem('crawl_queue', 1, page_url) # Remove the URL from the Redis queue
-                r.sadd('visited', page_url)
                 Spider.update_files()  # Update the queue and crawled files from Redis data
 
     @staticmethod 
     # Static method to gather links from a page
     def gather_links(page_url):
+        if not Spider.robot_parser.can_fetch("*", page_url):
+            print(f"Blocked by robots.txt: {page_url}")
+            return set()
+        
         html_string = '' 
         try: 
             req = Request(page_url, headers={
@@ -138,16 +149,18 @@ class Spider:
                 continue
             if Spider.domain_name not in url:
                 continue 
-            if not r.sismember('visited', url):
+            if not Spider.get_robot_parser().can_fetch("*", url):
+                continue 
+            if not r.sismember('visited', url) and r.sadd('queued', url): # Only add to queue if not already visited or queued
                 if any(url.lower().endswith(ext) for ext in DOCLING_EXTENSIONS): 
                     r.rpush('doc_queue', url) # BASICALLY ONLY DO DOCLING AFTER IT RUNS THE OTHERS 
                 else: 
-                    r.rpush('crawl_queue', url)
+                    r.rpush('waitingRoom_queue', url)
                 
     @staticmethod 
     # Static method to update the queue and crawled files from Redis data
     def update_files(): 
-        queue = r.lrange('crawl_queue', 0, -1) # Get all URLs in the Redis queue
+        queue = r.lrange('waitingRoom_queue', 0, -1) # Get all URLs in the Redis queue
         set_to_file({u.decode('utf-8') for u in queue}, Spider.queue_file) # Save the queue to file
         visited = r.smembers('visited') # Get all visited URLs from Redis set
         set_to_file({u.decode('utf-8') for u in visited}, Spider.crawled_file) # Save the visited URLs to file
