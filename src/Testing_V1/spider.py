@@ -2,6 +2,7 @@ import json
 from urllib.request import urlopen, Request
 from urllib.robotparser import RobotFileParser
 from link_finder import LinkFinder
+from urllib.parse import urlparse
 from fileManager import * 
 from html_parser import * 
 import redis 
@@ -19,6 +20,7 @@ class Spider:
     parser = None
     parsed_docs = [] 
     lock = threading.Lock() # Preventing multiple workers accessing the same URL 
+    BLOCKED_URLS = ['library.ccsu.edu', 'libguides.ccsu.edu', 'ccsu.edu/bookings'] # An example of a domain to block (can be expanded as needed)
 
 # Spider class to manage crawling and link extraction
     def __init__(self, project_name, base_url, domain_name): 
@@ -39,6 +41,7 @@ class Spider:
         return Spider._robot_parser
     @staticmethod
     def bootUP(): 
+        r.flushdb() 
         create_project_dir(Spider.project_name) 
         create_data_files(Spider.project_name, Spider.base_url)
         Spider.parser = DocumentParser(Spider.base_url, Spider.domain_name)
@@ -68,7 +71,7 @@ class Spider:
     @staticmethod 
     # Static method to gather links from a page
     def gather_links(page_url):
-        if not Spider.get_robot_parser():
+        if not Spider.get_robot_parser().can_fetch("*", page_url):
             print(f"Blocked by robots.txt: {page_url}")
             return set()
         
@@ -145,11 +148,16 @@ class Spider:
     @staticmethod 
     def add_links_to_queue(links): # Loop through each link one by one, if it exists, go to the next item in the list 
         for url in links: 
-            if url.startswith(('mailto:', 'tel:', 'javascript:', 'Mailto:', '#')):
+            if any (blocked in url for blocked in Spider.BLOCKED_URLS):
+                continue
+            if url.startswith(('mailto:', 'tel:', 'javascript:', 'Mailto:', '#')): 
                 continue
             if Spider.domain_name not in url:
                 continue 
-            if not Spider.get_robot_parser():
+            if any (url.lower().endswith(ext) for ext in SKIP_EXTENSIONS):
+                continue
+            parsed = urlparse(url)
+            if not Spider.get_robot_parser().can_fetch("*", url):
                 continue 
             if not r.sismember('visited', url) and r.sadd('queued', url): # Only add to queue if not already visited or queued
                 if any(url.lower().endswith(ext) for ext in DOCLING_EXTENSIONS): 

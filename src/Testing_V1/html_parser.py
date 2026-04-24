@@ -14,8 +14,7 @@ def get_Converter():
 
 DOCLING_EXTENSIONS = ('.pdf', '.docx', '.doc', '.ppt', '.pptx', 
                        '.xls', '.xlsx')
-SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg') 
-
+SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg')
 converter = DocumentConverter() 
 
 class DocumentParser: 
@@ -26,22 +25,26 @@ class DocumentParser:
         self.domain_name = domain_name
         self.session = requests.Session()  # Use a session for connection pooling and retries
     def parse(self,url):  
-        lower = url.lower() #Set the url to lowercase
-        if any(lower.endswith(ext) for ext in SKIP_EXTENSIONS): # ext 
-            return None 
+        try: 
+            lower = url.lower() #Set the url to lowercase
+            if any(lower.endswith(ext) for ext in SKIP_EXTENSIONS): # ext 
+                return None 
 
-        if any(lower.endswith(ext) for ext in DOCLING_EXTENSIONS):
-            result = get_Converter().convert(url)
-            record = {"url": url, "type": "docling", "content": result.document.export_to_markdown() }
-        else: 
-            response = self.session.get(url, timeout= 10) 
-            soup = BeautifulSoup(response.text, 'html.parser')
-            record = self.extract_content(soup, url) 
-            record["type"] = "html"
+            if any(lower.endswith(ext) for ext in DOCLING_EXTENSIONS):
+                result = get_Converter().convert(url)
+                record = {"url": url, "type": "docling", "content": result.document.export_to_markdown() }
+            else: 
+                response = self.session.get(url, timeout= 10) 
+                soup = BeautifulSoup(response.text, 'html.parser')
+                record = self.extract_content(soup, url) 
+                record["type"] = "html"
 
-        with open("parsed_docs.json", "a") as f:
+            with open("parsed_docs.jsonl", "a") as f:
                   f.write(json.dumps(record) + "\n")
-        return record 
+            return record 
+        except Exception as e:
+            print(f"Parse error skipping {url}: {e}")
+            return None 
     
     def extract_content(self, soup, url):
         # WE NEED TO REMOVE UNNESSARY CONTENT FOR HTML 

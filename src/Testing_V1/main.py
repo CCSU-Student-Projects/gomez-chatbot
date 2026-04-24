@@ -59,7 +59,7 @@ def work():
 
 
 def crawl():
-    r.flushdb() # Clear Redis for a fresh start 
+    r.flushdb() 
     print("Starting crawl...")
     Spider(PROJECT_NAME, HOME_PAGE, DOMAIN_NAME)  
     # Explores the queue

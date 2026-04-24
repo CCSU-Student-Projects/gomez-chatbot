@@ -17,4 +17,4 @@ print(result.document.export_to_markdown())
 
 r = redis.Redis(host='localhost', port=6379, db=0)
 docs = [u.decode('utf-8') for u in r.lrange('doc_queue', 0, -1)]
-print(f"Docs queued: {docs}")
+print(f"Docs queued: {docs} | Total: {len(docs)}")
