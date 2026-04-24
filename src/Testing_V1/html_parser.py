@@ -14,12 +14,11 @@ def get_Converter():
 
 DOCLING_EXTENSIONS = ('.pdf', '.docx', '.doc', '.ppt', '.pptx', 
                        '.xls', '.xlsx')
-SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg')
-
+SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg') 
 
 converter = DocumentConverter() 
 
-class HTMLPARSER: 
+class DocumentParser: 
     
     
     def __init__(self, base_url, domain_name): 

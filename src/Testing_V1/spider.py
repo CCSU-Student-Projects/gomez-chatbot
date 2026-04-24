@@ -32,18 +32,18 @@ class Spider:
     @staticmethod
     # Robot Parser to check if crawling is allowed for a URL
     def get_robot_parser():
-        rp = RobotFileParser()
-        rp.set_url(f"{Spider.base_url}/robots.txt")
-        rp.read()
-        return rp
+        if not hasattr(Spider, '_robot_parser'):
+            Spider._robot_parser = RobotFileParser()
+            Spider._robot_parser.set_url(f"{Spider.base_url}/robots.txt")
+            Spider._robot_parser.read()
+        return Spider._robot_parser
     @staticmethod
     def bootUP(): 
-        r.flushdb() # Clear Redis for a fresh start
         create_project_dir(Spider.project_name) 
         create_data_files(Spider.project_name, Spider.base_url)
-        Spider.parser = HTMLPARSER(Spider.base_url, Spider.domain_name)
-        Spider.robot_parser = RobotFileParser() 
-        Spider.robot_parser.set_url(f"{Spider.base_url}/robots.txt")
+        Spider.parser = DocumentParser(Spider.base_url, Spider.domain_name)
+        # Initialize and cache the robot parser once
+        Spider.get_robot_parser()
 # Static method to crawl a page and extract links
     @staticmethod 
     def crawl_page(thread_name, page_url): 
@@ -68,7 +68,7 @@ class Spider:
     @staticmethod 
     # Static method to gather links from a page
     def gather_links(page_url):
-        if not Spider.robot_parser.can_fetch("*", page_url):
+        if not Spider.get_robot_parser():
             print(f"Blocked by robots.txt: {page_url}")
             return set()
         
@@ -149,7 +149,7 @@ class Spider:
                 continue
             if Spider.domain_name not in url:
                 continue 
-            if not Spider.get_robot_parser().can_fetch("*", url):
+            if not Spider.get_robot_parser():
                 continue 
             if not r.sismember('visited', url) and r.sadd('queued', url): # Only add to queue if not already visited or queued
                 if any(url.lower().endswith(ext) for ext in DOCLING_EXTENSIONS): 

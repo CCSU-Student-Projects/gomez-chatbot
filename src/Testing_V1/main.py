@@ -1,10 +1,12 @@
 import threading
 import time
+import json 
 import redis
 from spider import Spider
 from domain import *
 from fileManager import *
-import json 
+from testingMongo import insertDocumentsIntoMongoDB
+from pymongo import MongoClient
 
 
 # Redis commands used:
@@ -19,11 +21,14 @@ import json
 # Configuration
 
 # NOTE: Docker Desktop must be installed and running for this to work, and Redis must be set up as well! 
+# NOTE: MongoDB must be installed and running for this to work as well! 
 
 PROJECT_NAME = 'CCSU_Crawl_Test' 
-HOME_PAGE = 'https://www.ccsu.edu/a-z-index'
+HOME_PAGE = 'https://www.ccsu.edu'
 DOMAIN_NAME = 'ccsu.edu'
 NUMBER_OF_THREADS = 12
+connectionString = "mongodb://localhost:27017/website_crawl"
+client = MongoClient(connectionString) 
 # Initialize Redis connection (Connects to local Redis instance)
 r = redis.Redis(host='localhost', port=6379, db=0)
 
@@ -70,13 +75,14 @@ def crawl():
             break
         time.sleep(5)
 
-# Flush any remaining docs under 100
+# Flush any remaining docs in memory to file before exiting, and print final stats. 
     if Spider.parsed_docs:
         with open(PROJECT_NAME + '/parsed_docs.json', 'a', encoding='utf-8') as f:
                 for d in Spider.parsed_docs:
                      f.write(json.dumps(d, ensure_ascii=False) + '\n')
         print("Crawl complete! Final stats:")
         print(f"Total URLs visited: {r.scard('visited')}")
+insertDocumentsIntoMongoDB() 
 
 if __name__ == '__main__':
       crawl() 
