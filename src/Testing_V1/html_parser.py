@@ -3,6 +3,9 @@ import requests
 from urllib.parse import urlparse 
 import json 
 from docling.document_converter import DocumentConverter
+import datetime
+
+
 
 converter = None 
 
@@ -18,7 +21,8 @@ SKIP_EXTENSIONS = ('.zip', '.mp4', '.mp3', '.png', '.jpg', '.jpeg')
 converter = DocumentConverter() 
 
 class DocumentParser: 
-    
+    current_time = datetime.datetime.now() 
+    currentTime_Str = current_time.strftime("%Y-%m-%d %H:%M:%S")
     
     def __init__(self, base_url, domain_name): 
         self.base_url = base_url
@@ -38,6 +42,9 @@ class DocumentParser:
                 soup = BeautifulSoup(response.text, 'html.parser')
                 record = self.extract_content(soup, url) 
                 record["type"] = "html"
+                currentTime_Str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                record["time"] = currentTime_Str
+
 
             with open("parsed_docs.jsonl", "a") as f:
                   f.write(json.dumps(record) + "\n")
@@ -67,10 +74,12 @@ class DocumentParser:
             for p in soup.find_all('p') 
             if (text := p.get_text(strip=True)) and len(text.split()) > 10
         ]
+        currentTime_Str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return {
             'url': url,
             'type': 'html',
             'title': soup.title.string if soup.title else '',
+            'time': currentTime_Str,
             'meta_description': meta['content'] if meta and 'content' in meta.attrs else '',
             'headings': headings,
             'paragraphs': paragraphs, 
