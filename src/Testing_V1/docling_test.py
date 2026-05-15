@@ -1,70 +1,35 @@
-
-from html_parser import * 
 import redis
-# Initialize the converter
-'''
-"""from docling.document_converter import DocumentConverter
-
-    #Implement method to pasrese through text file for the .pdf. 
-    #Make a variable with the assigned .pdf to put into the source varianle
-    #Convert pdf to JSON and send to a db
-
-converter = DocumentConverter()
-
-# Convert a document (from a local path, URL, or stream)
-result = converter.convert(source)
-
-# Export the result to Markdown
-print(result.document.export_to_markdown())   
-
-
-# This class calls the Redis file, and prints the queued documents in Redis. 
-# NOTE: This is for any DOCLING documents that are queued in Redis. It will print the URLs of the documents that are currently in the queue.
-
-r = redis.Redis(host='localhost', port=6379, db=0)
-docs = [u.decode('utf-8') for u in r.lrange('doc_queue', 0, -1)]
-print(f"Docs queued: {docs} | Total: {len(docs)}")
-    #https://www.docling.ai/#start """
-
 import json
 from docling.document_converter import DocumentConverter
 
-def convert_pdfs_to_json(urls, output_file="output.json"):
-    converter = DocumentConverter()
-    results = []
+# Connect to the same Redis instance your spider uses 
+r = redis.Redis(host='localhost', port=6379, db=0)
+converter = DocumentConverter()
 
-    for url in urls:
+def process_documents():
+    print("Docling Processor started. Waiting for documents...")
+    
+    while True:
+        # This "pops" a URL from the 'doc_queue' created by your spider 
+        _, url_bytes = r.blpop('doc_queue')
+        url = url_bytes.decode('utf-8')
+        
         try:
-            print(f"Processing: {url}")
-            doc = converter.convert(url).document
+            print(f"Converting: {url}")
+            result = converter.convert(url)
+            markdown_content = result.document.export_to_markdown() [cite: 3, 13]
             
-            # Extract content
-            markdown = doc.export_to_markdown()
-
-            results.append({
-                "source": url,
-                "content": markdown
-            })
-
+            # Print the output to your console
+            print(f"\n--- CONVERSION SUCCESSFUL: {url} ---")
+            print(markdown_content[:1000]) # Print first 1000 chars
+            print("-" * 50)
+            
+            # Optionally save to a separate file
+            with open("converted_docs.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"url": url, "content": markdown_content}) + "\n")
+                
         except Exception as e:
-            print(f"Error processing {url}: {e}")
-            results.append({
-                "source": url,
-                "error": str(e)
-            })
+            print(f"Failed to convert {url}: {e}")
 
-    # Save to JSON file
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=4, ensure_ascii=False)
-
-    print(f"Saved results to {output_file}")
-
-
-# Example usage
-pdf_urls = [
-    "https://docs.ccsu.edu/CampusMap.pdf",
-]
-
-convert_pdfs_to_json(pdf_urls)
-this is my test file
-'''
+if __name__ == "__main__":
+    process_documents()

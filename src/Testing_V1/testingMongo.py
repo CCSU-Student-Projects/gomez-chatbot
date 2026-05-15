@@ -18,7 +18,7 @@
 # db.dropDatabase()                           - Drop current database
 # db.collection.drop()                        - Drop a collection
 # exit                                        - Exit MongoDB shell
-
+'''
 from pymongo import MongoClient
 import json 
 
@@ -37,3 +37,4 @@ def insertDocumentsIntoMongoDB():
              if line.strip():
                 document = json.loads(line) 
                 collection.insert_one(document)
+                '''

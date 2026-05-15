@@ -24,16 +24,32 @@ from pymongo import MongoClient
 # NOTE: MongoDB must be installed and running for this to work as well! 
 
 PROJECT_NAME = 'CCSU_Crawl_Test' 
-HOME_PAGE = 'https://www.ccsu.edu'
-DOMAIN_NAME = 'ccsu.edu'
-NUMBER_OF_THREADS = 12
-connectionString = "mongodb://localhost:27017/website_crawl"
-client = MongoClient(connectionString) 
+HOME_PAGE = 'https://toscrape.com/'
+DOMAIN_NAME = 'toscrape.com'
+NUMBER_OF_THREADS = 8
+#connectionString = "mongodb://localhost:27017/website_crawl"*****************
+#client = MongoClient(connectionString) ********************
 # Initialize Redis connection (Connects to local Redis instance)
 r = redis.Redis(host='localhost', port=6379, db=0)
 
 
 # Load initial URLs from queue.txt into Redis
+def doc_workers() :
+     print("Starting doc workers...")
+     while True:
+         # Get a document and wait 5 seconds.
+         result = r.blpop('waitingRoom_docs', timeout=5) # Get a document from the Redis queue
+         if not result:  # If no document is retrieved within the timeout, break the loop
+             continue
+         doc = result[1].decode('utf-8')  # Decode bytes to string
+         print(f"Processing document: {doc}")
+         try:
+             # Process the document
+             Spider.parser.parse(doc)
+         except Exception as e:
+             print(f"Error processing document: {doc}, Error: {e}")
+
+             
 
 def create_workers():
     threads = [] # Create worker threads to process the crawl queue
@@ -42,6 +58,12 @@ def create_workers():
         t.daemon = True
         t.start()
         threads.append(t)
+
+        #Docling workers
+        docling_worker = threading.Thread(target=docling_work)
+        docling_worker.daemon = True
+        docling_worker.start()
+        threads.append(docling_worker)
     return threads
 
 # Worker function to process URLs from the Redis queue
@@ -82,7 +104,7 @@ def crawl():
                      f.write(json.dumps(d, ensure_ascii=False) + '\n')
         print("Crawl complete! Final stats:")
         print(f"Total URLs visited: {r.scard('visited')}")
-insertDocumentsIntoMongoDB() 
+#insertDocumentsIntoMongoDB() *****************
 
 if __name__ == '__main__':
       crawl() 
