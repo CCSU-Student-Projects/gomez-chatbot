@@ -1,35 +1,19 @@
 
 from html_parser import * 
 import redis
-# Initialize the converter
-'''
-"""from docling.document_converter import DocumentConverter
+import json
 
-    #Implement method to pasrese through text file for the .pdf. 
-    #Make a variable with the assigned .pdf to put into the source varianle
-    #Convert pdf to JSON and send to a db
-
-converter = DocumentConverter()
-
-# Convert a document (from a local path, URL, or stream)
-result = converter.convert(source)
-
-# Export the result to Markdown
-print(result.document.export_to_markdown())   
-
+from docling.document_converter import DocumentConverter
 
 # This class calls the Redis file, and prints the queued documents in Redis. 
 # NOTE: This is for any DOCLING documents that are queued in Redis. It will print the URLs of the documents that are currently in the queue.
 
-r = redis.Redis(host='localhost', port=6379, db=0)
-docs = [u.decode('utf-8') for u in r.lrange('doc_queue', 0, -1)]
+r = redis.Redis(host='localhost', port=6380 , db=0)
+docs = [u.decode('utf-8') for u in r.lrange('docling_queue', 0, -1)]
 print(f"Docs queued: {docs} | Total: {len(docs)}")
     #https://www.docling.ai/#start """
 
-import json
-from docling.document_converter import DocumentConverter
-
-def convert_pdfs_to_json(urls, output_file="output.json"):
+def convert_pdfs_to_json(urls, output_file="docling_output.json"):
     converter = DocumentConverter()
     results = []
 
@@ -60,10 +44,3 @@ def convert_pdfs_to_json(urls, output_file="output.json"):
     print(f"Saved results to {output_file}")
 
 
-# Example usage
-pdf_urls = [
-    "https://docs.ccsu.edu/CampusMap.pdf",
-]
-
-convert_pdfs_to_json(pdf_urls)
-'''

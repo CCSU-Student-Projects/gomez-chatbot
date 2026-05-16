@@ -3,12 +3,13 @@ from urllib.request import urlopen, Request
 from urllib.robotparser import RobotFileParser
 from link_finder import LinkFinder
 from urllib.parse import urlparse
+from docling_test import convert_pdfs_to_json
 from fileManager import * 
 from html_parser import * 
 import redis 
 import threading
 
-r = redis.Redis(host='localhost', port=6379, db=0) # Connect to Redis server
+r = redis.Redis(host='localhost', port=6380 , db=0) # Connect to Redis server
 
 class Spider: 
     # Class variables (shared among all instances to prevent overlapping data)
@@ -41,12 +42,12 @@ class Spider:
         return Spider._robot_parser
     @staticmethod
     def bootUP(): 
-        r.flushdb() 
         create_project_dir(Spider.project_name) 
         create_data_files(Spider.project_name, Spider.base_url)
         Spider.parser = DocumentParser(Spider.base_url, Spider.domain_name)
         # Initialize and cache the robot parser once
         Spider.get_robot_parser()
+
 # Static method to crawl a page and extract links
     @staticmethod 
     def crawl_page(thread_name, page_url): 
@@ -59,7 +60,7 @@ class Spider:
                 if doc: 
                     with  Spider.lock: 
                         Spider.parsed_docs.append(doc)
-                        if len(Spider.parsed_docs) >= 10: # Every 10 parsed documents, save to file to prevent memory loss 
+                        if len(Spider.parsed_docs) >= 50: # Every 50 parsed documents, save to file to prevent memory loss 
                             with open(f"{Spider.project_name}/parsed_docs.jsonl", 'a', encoding='utf-8') as f:
                                 for document in Spider.parsed_docs:
                                     f.write(json.dumps(document, ensure_ascii=False) + '\n')
@@ -71,16 +72,19 @@ class Spider:
     @staticmethod 
     # Static method to gather links from a page
     def gather_links(page_url):
-        if not Spider.get_robot_parser().can_fetch("*", page_url):
+        if not Spider.get_robot_parser().can_fetch("*", page_url): # Check robots.txt before crawling
             print(f"Blocked by robots.txt: {page_url}")
             return set()
         
-        html_string = '' 
+        html_string = ''  # Initialize html_string to avoid UnboundLocalError if fetching fails
         try: 
+
+            # Header is added to mimic a real browser and avoid blocking 
+
             req = Request(page_url, headers={
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             })
-            response = urlopen(req) 
+            response = urlopen(req, timeout=10) # Set a timeout to avoid hanging on slow responses
             content_type = response.getheader('Content-Type')
             if content_type and 'text/html' in content_type: 
                 html_bytes = response.read() 
@@ -156,15 +160,18 @@ class Spider:
                 continue 
             if any (url.lower().endswith(ext) for ext in SKIP_EXTENSIONS):
                 continue
-            parsed = urlparse(url)
-            if not Spider.get_robot_parser().can_fetch("*", url):
+           #parsed = urlparse(url) # Parse the URL to check its components
+            if not Spider.get_robot_parser().can_fetch("*", url): 
                 continue 
             if not r.sismember('visited', url) and r.sadd('queued', url): # Only add to queue if not already visited or queued
                 if any(url.lower().endswith(ext) for ext in DOCLING_EXTENSIONS): 
-                    r.rpush('doc_queue', url) # BASICALLY ONLY DO DOCLING AFTER IT RUNS THE OTHERS 
+                    r.rpush('docling_queue', url) # BASICALLY ONLY DO DOCLING AFTER IT RUNS THE OTHERS 
+
                 else: 
                     r.rpush('waitingRoom_queue', url)
-                
+            
+    
+    
     @staticmethod 
     # Static method to update the queue and crawled files from Redis data
     def update_files(): 

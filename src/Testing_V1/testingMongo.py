@@ -23,17 +23,24 @@ from pymongo import MongoClient
 import json 
 
 
-def insertDocumentsIntoMongoDB():
-  connectionString = "mongodb://localhost:27017/website_crawl"
-  client = MongoClient(connectionString) 
-
-
-  db = client.get_database("website_crawl")
-  collection = db.get_collection("html_documents")
-  collection.delete_many({})  # wipe before inserting
-
-  with open ("CCSU_Crawl_Test/parsed_docs.jsonl", "r", encoding="utf-8") as f:
+connectionString = "mongodb://localhost:27017/website_crawl"
+client = MongoClient(connectionString) 
+def insert_HTML_Documents_IntoMongoDB(): 
+    db = client.get_database("website_crawl")
+    collection = db.get_collection("Stored_HTML_URLS")
+    with open ("CCSU_Crawl_Test/parsed_docs.jsonl", "r", encoding="utf-8") as f:
            for line in f: 
              if line.strip():
                 document = json.loads(line) 
                 collection.insert_one(document)
+    print("Documents inserted into MongoDB successfully for HTML!")
+
+def insert_Docling_Documents_IntoMongoDB(): 
+    db = client.get_database("website_crawl")
+    collection = db.get_collection("all_Stored_DOCLING_URLS")
+    with open ("CCSU_Crawl_Test/parsed_docs.jsonl", "r", encoding="utf-8") as f:
+           for line in f: 
+             if line.strip():
+                document = json.loads(line) 
+                collection.insert_one(document)
+    print("Documents inserted into MongoDB successfully for DOCLING!")
