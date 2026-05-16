@@ -5,7 +5,6 @@ from link_finder import LinkFinder
 from urllib.parse import urlparse
 from fileManager import * 
 from html_parser import * 
-from docling_test import convert_pdfs_to_json
 import redis 
 import threading
 

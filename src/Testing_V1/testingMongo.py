@@ -18,23 +18,39 @@
 # db.dropDatabase()                           - Drop current database
 # db.collection.drop()                        - Drop a collection
 # exit                                        - Exit MongoDB shell
-'''
+
 from pymongo import MongoClient
 import json 
 
 
-def insertDocumentsIntoMongoDB():
-  connectionString = "mongodb://localhost:27017/website_crawl"
-  client = MongoClient(connectionString) 
+
+connectionString = "mongodb://localhost:27017/website_crawl"
+client = MongoClient(connectionString) 
+db = client.get_database("website_crawl")
 
 
-  db = client.get_database("website_crawl")
-  collection = db.get_collection("html_documents")
-  collection.delete_many({})  # wipe before inserting
+def insertHTMLDocuments(project_name): 
+     collection = db.get_collection("html_documents")
+     collection.delete_many({})  # wipe before inserting
 
-  with open ("CCSU_Crawl_Test/parsed_docs.jsonl", "r", encoding="utf-8") as f:
+     with open (f"{project_name}/parsed_docs.jsonl", "r", encoding="utf-8") as f:
            for line in f: 
              if line.strip():
                 document = json.loads(line) 
                 collection.insert_one(document)
-                '''
+     print("HTML documents inserted into MongoDB successfully!")
+
+def insertDoclingDocuments(project_name): 
+     collection = db.get_collection("docling_documents")
+     collection.delete_many({})  # wipe before inserting
+
+     with open (f"{project_name}/converted_docs.jsonl", "r", encoding="utf-8") as f:
+           for line in f: 
+             if line.strip():
+                document = json.loads(line) 
+                collection.insert_one(document)
+     print("Docling documents inserted into MongoDB successfully!")
+
+if __name__ == "__main__":
+    insertHTMLDocuments(project_name="CCSU_Crawl_HTML_DOCLING_TEST") 
+    insertDoclingDocuments(project_name="CCSU_Crawl_HTML_DOCLING_TEST") 

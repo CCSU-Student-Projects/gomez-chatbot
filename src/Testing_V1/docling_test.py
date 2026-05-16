@@ -6,7 +6,7 @@ from docling.document_converter import DocumentConverter
 r = redis.Redis(host='localhost', port=6379, db=0)
 converter = DocumentConverter()
 
-def process_documents():
+def process_documents(project_name):
     print("Docling Processor started. Waiting for documents...")
     
     while True:
@@ -17,7 +17,7 @@ def process_documents():
         try:
             print(f"Converting: {url}")
             result = converter.convert(url)
-            markdown_content = result.document.export_to_markdown() [cite: 3, 13]
+            markdown_content = result.document.export_to_markdown() # Removed the cite code here 
             
             # Print the output to your console
             print(f"\n--- CONVERSION SUCCESSFUL: {url} ---")
@@ -25,11 +25,11 @@ def process_documents():
             print("-" * 50)
             
             # Optionally save to a separate file
-            with open("converted_docs.jsonl", "a", encoding="utf-8") as f:
+            with open(f"{project_name}/converted_docs.jsonl", "a", encoding="utf-8") as f:
                 f.write(json.dumps({"url": url, "content": markdown_content}) + "\n")
                 
         except Exception as e:
             print(f"Failed to convert {url}: {e}")
 
 if __name__ == "__main__":
-    process_documents()
+    process_documents("CCSU_Crawl_HTML_DOCLING_TEST")
