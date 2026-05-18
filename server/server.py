@@ -1,6 +1,5 @@
 from flask import Flask,request,jsonify
 from flask_cors import CORS
-from pymongo import MongoClient
 from src.chunker.embedder import DocumentEmbedder
 from src.llm.llama3_8b_api import Llama3_8B_API
 from src.llm.personality_config import DEFAULT_SYSTEM_PROMPT
@@ -9,22 +8,20 @@ import datetime
 app=Flask(__name__)
 CORS(app) #applying CORS 
 
-# MongoDB setup
-client = MongoClient("mongodb://localhost:27017/")
-db = client["ccsu_chatbot"]
-sessions = db["sessions"]
-
 # LLM and embedder initialization
 embedder = DocumentEmbedder(use_gpu_config=False)
-embedder.load_vector_store("./data/vector_db/go2_robot_vector_store")
+embedder.load_vector_store("./data/vector_db/go2_robot_vector_store") # load prebuilt vector db 
 llm = Llama3_8B_API()
 
-def get_history(session_id: str):
-    doc = sessions.find_one({"session_id": session_id})
-    if doc:
-        return doc["messages"]
-    # Brand new session — seed with system prompt
-    return [{"role": "system", "content": DEFAULT_SYSTEM_PROMPT}]
+active_session={} # new session each time not storing 
+
+def needs_rag(user_input: str):
+    check_prompt = [
+        {"role": "system", "content": "Decide if the question needs RAG documents. Answer YES or NO."},
+        {"role": "user", "content": f"Question: {user_input}"}
+    ]
+    response = llm.generate_response(check_prompt)
+    return "yes" in response.lower()
 
 #Create GET endpoint 
 @app.route("/chat",methods=["GET"])
@@ -37,17 +34,17 @@ def chat():
     data=request.json #get request from client
     message=data["message"] #get message property
 
-    print("received: "+ message)
+    messages = [{"role": "system", "content": DEFAULT_SYSTEM_PROMPT}]
+    messages.append({"role": "user", "content": message})
 
-    response = ollama. chat(
-        model= "llama3",
-        messages=[
-            {"role": "user","content": message}
-        ]
-    )
+    if needs_rag(message):
+        docs = embedder.search_similar(message, k=3)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        messages.append({"role": "system", "content": f"Relevant context:\n{context}"})
 
-    reply=response["message"]["content"]
-    return jsonify({"reply":reply})
+    response = llm.generate_response(messages)
+
+    return jsonify({"reply":response})
 
 if __name__=="__main__":
     app.run(port=8000,debug=True)
