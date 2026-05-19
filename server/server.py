@@ -1,12 +1,20 @@
+import os
+import datetime
 from flask import Flask,request,jsonify
 from flask_cors import CORS
+from pymongo import MongoClient
 from src.chunker.embedder import DocumentEmbedder
 from src.llm.llama3_8b_api import Llama3_8B_API
 from src.llm.personality_config import DEFAULT_SYSTEM_PROMPT
-import datetime
 
 app=Flask(__name__)
 CORS(app) #applying CORS 
+
+# Local MongoDB integration
+MONGO_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+mongo_client = MongoClient(MONGO_URI)
+db = mongo_client["gomez_bot"]
+chat_collection = db["chat_history"]
 
 # LLM and embedder initialization
 embedder = DocumentEmbedder(use_gpu_config=False)
@@ -43,6 +51,12 @@ def chat():
         messages.append({"role": "system", "content": f"Relevant context:\n{context}"})
 
     response = llm.generate_response(messages)
+
+    chat_collection.insert_one({
+        "message": message,
+        "response": response,
+        "created_at": datetime.datetime.utcnow()
+    })
 
     return jsonify({"reply":response})
 
