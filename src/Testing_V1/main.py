@@ -23,7 +23,7 @@ from testingMongo import insertHTMLDocuments, insertDoclingDocuments
 # NOTE: Docker Desktop must be installed and running for this to work, and Redis must be set up as well! 
 # NOTE: MongoDB must be installed and running for this to work as well! 
 
-PROJECT_NAME = 'CCSU_Crawl_HTML_DOCLING_TEST' 
+PROJECT_NAME = 'CCSU_Crawl_FINAL_TEST' 
 HOME_PAGE = 'https://www.ccsu.edu/'
 DOMAIN_NAME = 'ccsu.edu'
 NUMBER_OF_THREADS = 12
