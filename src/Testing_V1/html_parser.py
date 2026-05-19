@@ -5,8 +5,6 @@ import json
 from docling.document_converter import DocumentConverter
 import datetime
 
-
-
 converter = None 
 
 def get_Converter(): 
